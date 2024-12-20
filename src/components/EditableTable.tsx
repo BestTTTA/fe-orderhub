@@ -100,13 +100,20 @@ const ProdcutWithdrawal: React.FC<{
   const handleWithdraw = () => {
     const message = `Sku: ${inventory.sku} จำนวน ${quantity} ชิ้น จากสาขา ${branch.branch_name}`;
     sendMessage("U211d29677d7bf46709126412b1c66c08", message, inventory.imageUrl || "");
-    onClose(); 
+    onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-white rounded-lg shadow-xl p-6 w-11/12 max-w-lg">
         <h2 className="text-2xl font-bold mb-4">เบิกสินค้า</h2>
+        <center>
+          <img
+            src={inventory.imageUrl}
+            alt={inventory.sku}
+            className="w-46 h-46 object-cover cursor-pointer hover:opacity-80"
+          />
+        </center>
         <div className="mb-4">
           <strong>ชื่อสินค้า:</strong> {inventory.product_name}
         </div>
