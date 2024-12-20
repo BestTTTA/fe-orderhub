@@ -3,6 +3,8 @@
 import React, { FC, useEffect, useState } from "react";
 import Image from "next/image";
 import axios from "axios";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 interface Branch {
   branch_name: string;
@@ -98,7 +100,7 @@ const ProdcutWithdrawal: React.FC<{
   const [quantity, setQuantity] = useState(1);
 
   const handleWithdraw = () => {
-    const message = `Sku: ${inventory.sku} จำนวน ${quantity} ชิ้น จากสาขา ${branch.branch_name}`;
+    const message = `ต้องการเบิก Sku: ${inventory.sku} จำนวน ${quantity} ชิ้น`;
     sendMessage("U211d29677d7bf46709126412b1c66c08", message, inventory.imageUrl || "");
     onClose();
   };
@@ -254,6 +256,73 @@ const Editable: FC = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [emptyInventory, setEmptyInventory] = useState<string | null>(null);
 
+
+  const [loaded, setLoaded] = useState(false);
+  const downloadPDF = async () => {
+    setLoaded(true);
+    const table = document.querySelector("table") as HTMLTableElement | null;
+  
+    if (table) {
+      // สร้าง Canvas จาก Table
+      html2canvas(table, { scale: 3, useCORS: true }).then((canvas) => {
+        const today = new Date();
+        const pdf = new jsPDF("portrait", "mm", "a4");
+  
+        const imgData = canvas.toDataURL("image/jpeg", 1.0);
+  
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+  
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+  
+        const ratio = pageWidth / canvasWidth;
+  
+        const contentHeight = canvasHeight * ratio;
+  
+        let position = 0;
+  
+        // Loop เพื่อแทรกแต่ละส่วนของตารางลงใน PDF
+        while (position < contentHeight) {
+          pdf.addImage(
+            imgData,
+            "JPEG",
+            0,
+            -position,
+            pageWidth,
+            canvasHeight * ratio
+          );
+          position += pageHeight;
+  
+          if (position < contentHeight) {
+            pdf.addPage();
+          }
+        }
+  
+        pdf.save(`orders_${today.toISOString().split("T")[0]}.pdf`);
+        setLoaded(false);
+      });
+    } else {
+      console.error("Table not found for PDF generation.");
+      setLoaded(false);
+    }
+  };
+    
+
+  // const exportToExcel = () => {
+  //   const table = document.querySelector("table") as HTMLTableElement | null;
+  //   if (table) {
+  //     const workbook = XLSX.utils.table_to_book(table, { sheet: "Sheet1" });
+  //     const today = new Date();
+  //     const fileName = `orders_${today.toISOString().split("T")[0]}.xlsx`;
+
+  //     XLSX.writeFile(workbook, fileName);
+  //   } else {
+  //     console.error("Table not found for Excel export.");
+  //   }
+  // };
+
+
   const sortOrders = (orders: Order[]): Order[] => {
     return [...orders].sort((a, b) => {
       const timeA = a.create_time || new Date(a.created_at || '').getTime() / 1000;
@@ -395,16 +464,26 @@ const Editable: FC = () => {
     );
   }
 
+
   return (
     <div>
       <div className="w-full bg-black p-4 flex justify-between items-center">
         <Image src="/logo/new_logo.svg" alt="Logo" width={120} height={120} />
-        <button
-          onClick={handleManualRefresh}
-          className="bg-white text-black px-4 py-2 rounded hover:bg-gray-200"
-        >
-          Refresh
-        </button>
+        <div className="flex space-x-4">
+          <button
+            onClick={downloadPDF}
+            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+            disabled={loaded}
+          >
+            {loaded ? "Generating PDF..." : "Download PDF"}
+          </button>
+          <button
+            onClick={handleManualRefresh}
+            className="bg-white text-black px-4 py-2 rounded hover:bg-gray-200"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
       <div className="overflow-x-auto p-4 flex">
         <table className="w-full h-full">
@@ -436,48 +515,95 @@ const Editable: FC = () => {
                   </td>
                 </tr>
                 {order.items.map((item, itemIndex, itemsArray) => (
-                  <tr
-                    key={`${orderIndex}-${itemIndex}`}
-                    className={`hover:bg-gray-50 h-full ${itemIndex === itemsArray.length - 1 && orderIndex !== orders.length - 1 ? 'border-b-8 border-white' : ''}`}
-                  >
-                    <td colSpan={2} className="border p-2 pl-6 bg-gray-50">
-                      <div className="flex items-center space-x-2">
-                        <img
-                          src={item.product_main_image}
-                          alt={item.sku}
-                          className="w-16 h-16 object-cover cursor-pointer hover:opacity-80"
-                          onClick={() => setSelectedImage(item.product_main_image)}
-                        />
-                        <div>
-                          <div><strong>SKU:</strong> {item.sku}</div>
+                  <React.Fragment key={`${orderIndex}-${itemIndex}`}>
+                    <tr
+                      className={`hover:bg-gray-50 h-full ${itemIndex === itemsArray.length - 1 && orderIndex !== orders.length - 1
+                        }`}
+                    >
+                      <td colSpan={2} className="border p-2 pl-6 bg-gray-50">
+                        <div className="flex items-center space-x-2">
+                          <img
+                            src={item.product_main_image}
+                            alt={item.sku}
+                            className="w-16 h-16 object-cover cursor-pointer hover:opacity-80"
+                          />
+                          <div>
+                            <div><strong>SKU:</strong> {item.sku}</div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td colSpan={2} className="border p-2 bg-gray-50">
-                      <div className="font-extrabold"><strong>ราคาซื้อ:</strong> {item.paid_price} บาท</div>
-                      <div className="text-[11px]">ราคาสินค้า: {item.item_price} บาท</div>
-                    </td>
-                    <td colSpan={3} className="border p-2 bg-gray-50 text-red-500">
-                      <strong>กำหนดส่งสินค้า:</strong> {item.fulfillment_sla}
-                    </td>
-                    <td className="p-2 bg-gray-50 flex items-center h-full justify-center">
-                      {!check ? (
-                        <button
-                          onClick={() => checkInventory(item.sku, item.model_sku, item.product_main_image)}
-                          className="bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 w-full"
-                        >
-                          ตรวจสอบคลังสินค้า
-                        </button>
-                      ) : (
-                        <button
-                          className="bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 w-full"
-                          disabled
-                        >
-                          Loading...
-                        </button>
-                      )}
-                    </td>
-                  </tr>
+                      </td>
+                      <td colSpan={2} className="border p-2 bg-gray-50">
+                        <div className="font-extrabold"><strong>ราคาซื้อ:</strong> {item.paid_price} บาท</div>
+                        <div className="text-[11px]">ราคาสินค้า: {item.item_price} บาท</div>
+                      </td>
+                      <td colSpan={3} className="border p-2 bg-gray-50 text-red-500">
+                        <strong>กำหนดส่งสินค้า:</strong> {item.fulfillment_sla}
+                      </td>
+                      <td className="p-2 bg-gray-50 flex items-center h-full justify-center">
+                        {!check ? (
+                          <button
+                            onClick={() => checkInventory(item.sku, item.model_sku, item.product_main_image)}
+                            className="bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 w-full"
+                          >
+                            ตรวจสอบคลังสินค้า
+                          </button>
+                        ) : (
+                          <button
+                            className="bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 w-full"
+                            disabled
+                          >
+                            Loading...
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan={8} className="border p-2 bg-gray-50">
+                        <div className="grid grid-cols-2 gap-2 w-fit ">
+                          <label className="flex items-center space-x-2">
+                            <input type="checkbox" />
+                            <span>มีสินค้า/พรีออเดอร์</span>
+                          </label>
+                          <label className="flex items-center space-x-2">
+                            <span>เบิกจาก:</span>
+                            <input type="text" className="border p-1 rounded w-full" />
+                          </label>
+                          <label className="flex items-center space-x-2">
+                            <input type="checkbox" />
+                            <span>ส่งงานให้ช่าง</span>
+                          </label>
+                          <label className="flex items-center space-x-2">
+                            <input type="checkbox" />
+                            <span>รับงานจากช่าง</span>
+                          </label>
+                          <label className="flex items-center space-x-2">
+                            <input type="checkbox" />
+                            <span>ปริ้นที่อยู่</span>
+                          </label>
+                          <label className="flex items-center space-x-2">
+                            <input type="checkbox" />
+                            <span>แพ็ค+จัดส่ง</span>
+                          </label>
+                          <label className="flex items-center space-x-2">
+                            <input type="checkbox" />
+                            <span>แจ้งเลขพัสดุ</span>
+                          </label>
+                          <label className="flex items-center space-x-2">
+                            <input type="checkbox" />
+                            <span>เพิ่มชื่อลูกค้า</span>
+                          </label>
+                          <label className="flex items-center space-x-2">
+                            <input type="checkbox" />
+                            <span>สั่งซื้อเพื่อตัดขาย</span>
+                          </label>
+                          <label className="flex items-center space-x-2">
+                            <input type="checkbox" />
+                            <span>ตัดขาย</span>
+                          </label>
+                        </div>
+                      </td>
+                    </tr>
+                  </React.Fragment>
                 ))}
               </React.Fragment>
             ))}
